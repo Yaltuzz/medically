@@ -1,18 +1,40 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
+    return const CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
         middle: Text('Home'),
       ),
-      child: Center(
-        child: CupertinoButton(
-          child: const Text('Next page'),
-          onPressed: () {},
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Welcome to Medically',
+                    style: TextStyle(
+                      color: Colors.purple,
+                      fontSize: 15,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  Icon(
+                    CupertinoIcons.smiley,
+                    color: Colors.purple,
+                    size: 50,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

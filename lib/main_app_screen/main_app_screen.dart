@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:medically/main_app_screen/explore_tab.dart';
+import 'package:medically/main_app_screen/recording_tab.dart';
 import 'package:medically/main_app_screen/home_tab.dart';
 
 class MainAppScreen extends StatelessWidget {
@@ -15,8 +15,8 @@ class MainAppScreen extends StatelessWidget {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.search_circle_fill),
-            label: 'Explore',
+            icon: Icon(CupertinoIcons.mic_circle),
+            label: 'Record',
           ),
         ],
       ),
@@ -27,7 +27,7 @@ class MainAppScreen extends StatelessWidget {
               case 0:
                 return const HomeTab();
               case 1:
-                return const ExploreTab();
+                return const RecordingTab();
               default:
                 return Container();
             }

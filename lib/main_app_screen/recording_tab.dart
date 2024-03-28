@@ -1,3 +1,6 @@
+import 'dart:developer';
+
+import 'package:chaquopy/chaquopy.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -29,6 +32,12 @@ class _RecordingTabState extends State<RecordingTab> {
             children: [
               GestureDetector(
                 onTap: () async {
+                  const code = 'import numpy as np\n'
+                      'arr = np.array([1, 2, 3, 4, 5])\n'
+                      'print(arr)\n'
+                      'print(type(arr))\n';
+                  final res = await Chaquopy.executeCode(code);
+                  log(res.toString());
                   audioRecorder = AudioRecorder();
                   if (await audioRecorder.hasPermission()) {
                     const encoder = AudioEncoder.wav;

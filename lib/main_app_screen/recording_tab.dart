@@ -1,13 +1,12 @@
 import 'dart:developer';
+import 'dart:io';
 
-import 'package:chaquopy/chaquopy.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:path/path.dart' as p;
-import 'package:audioplayers/audioplayers.dart' as ap;
-import 'package:audioplayers/audioplayers.dart';
 
 class RecordingTab extends StatefulWidget {
   const RecordingTab({Key? key}) : super(key: key);
@@ -18,8 +17,8 @@ class RecordingTab extends StatefulWidget {
 
 class _RecordingTabState extends State<RecordingTab> {
   late AudioRecorder audioRecorder;
-  final _audioPlayer = ap.AudioPlayer()..setReleaseMode(ReleaseMode.stop);
-
+  static const platform = MethodChannel('medically');
+  String text = '';
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -32,34 +31,18 @@ class _RecordingTabState extends State<RecordingTab> {
             children: [
               GestureDetector(
                 onTap: () async {
-                  const code = 'import numpy as np\n'
-                      'arr = np.array([1, 2, 3, 4, 5])\n'
-                      'print(arr)\n'
-                      'print(type(arr))\n';
-                  final res = await Chaquopy.executeCode(code);
-                  log(res.toString());
                   audioRecorder = AudioRecorder();
                   if (await audioRecorder.hasPermission()) {
-                    const encoder = AudioEncoder.wav;
-
-                    final devs = await audioRecorder.listInputDevices();
-                    debugPrint(devs.toString());
-
+                    const encoder = AudioEncoder.pcm16bits;
                     const config =
                         RecordConfig(encoder: encoder, numChannels: 1);
-
                     final dir = await getApplicationDocumentsDirectory();
                     final path = p.join(
                       dir.path,
-                      'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
+                      'audio_${DateTime.now().millisecondsSinceEpoch}.pcm',
                     );
                     await audioRecorder.start(config, path: path);
                   }
-                },
-                onLongPress: () async {
-                  final path = await audioRecorder.stop();
-                  _audioPlayer.setSource(DeviceFileSource(path!));
-                  _audioPlayer.play(DeviceFileSource(path), volume: 100);
                 },
                 child: const Icon(
                   CupertinoIcons.mic_circle,
@@ -67,10 +50,40 @@ class _RecordingTabState extends State<RecordingTab> {
                   color: Colors.black,
                 ),
               ),
+              GestureDetector(
+                onTap: () async {
+                  final path = await audioRecorder.stop();
+                  // ignore: unused_local_variable
+                  final bytes = await _readFileByte(path!);
+                  final result = await platform
+                      .invokeMethod<String>('recognize_audio', {"data": bytes});
+                  log(result ?? '');
+                  setState(() {
+                    text = result ?? '';
+                  });
+                },
+                child: const Icon(
+                  CupertinoIcons.rectangle_fill,
+                  size: 30,
+                  color: Colors.black,
+                ),
+              ),
+              Text(
+                text,
+                style: const TextStyle(fontSize: 10),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+Future<Uint8List?> _readFileByte(String filePath) async {
+  Uri myUri = Uri.parse(filePath);
+  File audioFile = File.fromUri(myUri);
+  Uint8List bytes;
+  bytes = await audioFile.readAsBytes();
+  return bytes;
 }

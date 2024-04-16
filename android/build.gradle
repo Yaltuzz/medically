@@ -3,13 +3,14 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://chaquo.com/maven" }
+        gradlePluginPortal()
     }
 
     dependencies {
         classpath 'com.android.tools.build:gradle:7.3.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "com.chaquo.python:gradle:15.0.1"
+        classpath "com.microsoft.onnxruntime:onnxruntime-android:latest.release"
+        classpath "com.microsoft.onnxruntime:onnxruntime-extensions-android:latest.release"
     }
 }
 

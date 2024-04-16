@@ -14,25 +14,23 @@ class HomeTab extends StatelessWidget {
         child: Center(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Welcome to Medically',
-                    style: TextStyle(
-                      color: Colors.purple,
-                      fontSize: 15,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  Icon(
-                    CupertinoIcons.smiley,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Welcome to Medically',
+                  style: TextStyle(
                     color: Colors.purple,
-                    size: 50,
+                    fontSize: 15,
+                    decoration: TextDecoration.none,
                   ),
-                ],
-              ),
+                ),
+                Icon(
+                  CupertinoIcons.smiley,
+                  color: Colors.purple,
+                  size: 50,
+                ),
+              ],
             ),
           ),
         ),

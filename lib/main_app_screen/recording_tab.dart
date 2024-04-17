@@ -17,7 +17,7 @@ class RecordingTab extends StatefulWidget {
 
 class _RecordingTabState extends State<RecordingTab> {
   late AudioRecorder audioRecorder;
-  static const platform = MethodChannel('medically');
+  static const platform = MethodChannel('speechToText');
   String text = '';
   @override
   Widget build(BuildContext context) {

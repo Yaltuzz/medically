@@ -10,21 +10,117 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.extensions.OrtxPackage
 import android.os.SystemClock
+import java.util.Collections
 
 class MainActivity: FlutterActivity() {
-  private val CHANNEL = "medically"
+  private val CHANNEL_STT = "speechToText"
+  private val CHANNEL_NLP = "naturalLanguageProcessing"
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
       super.configureFlutterEngine(flutterEngine)
       val recognizer = AudioRecognizer(this)
-      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler(recognizer)
+      val interpreter = TextInterpreter(this)
+      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_STT).setMethodCallHandler(recognizer)
+      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NLP).setMethodCallHandler(interpreter)
   }
 }
 
+class TextInterpreter(private val context: Context): MethodChannel.MethodCallHandler{
+    private val recognizeMethod = "interpret_text"
 
+    private val textAnswering: TextAnswering by lazy {
+        val resources = context.resources
+        resources.openRawResource(R.raw.csarron_mobilebert_uncased_squad_v2_quant_with_pre_post_processing).use {
+            val modelBytes = it.readBytes()
+            TextAnswering(modelBytes)
+        }
+    }
+
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            recognizeMethod -> interpretText(call, result)
+            else -> result.notImplemented()
+        }
+    }
+    private fun interpretText(call: MethodCall, result: MethodChannel.Result)
+    {
+        val bytes: ByteArray? =  call.argument("data")
+        if (bytes==null) {
+            result.error("Some arguments have null value", "Some arguments have null value.", null)
+        }
+
+        val text = "Michael Jordan is widely regarded as one of the greatest basketball players of all time. His extraordinary talent, unparalleled work ethic, and relentless competitiveness propelled him to legendary status in the world of sports. Jordan's impact extends far beyond the basketball court, as he transcended the game to become a global icon and cultural phenomenon. From his numerous NBA championships to his iconic brand, Jordan's legacy continues to inspire aspiring athletes and fans around the world."
+        val question = "Who is Micheal Jordan?"
+        val inputTensor = fromString(text,question)
+
+
+        val results = inputTensor.use { textAnswering.run(inputTensor) }
+        result.success(results.text)
+    }
+
+    fun fromString(text: String, question: String): OnnxTensor {
+        val shape = longArrayOf(1, 2)
+        val env = OrtEnvironment.getEnvironment()
+        return OnnxTensor.createTensor(env, arrayOf(question, text), shape)
+    }
+}
+
+class TextAnswering(modelBytes: ByteArray) : AutoCloseable {
+    private var session: OrtSession
+    private var Cur_EP:String = ""
+    init {
+        session = createOrtSession("CPU",modelBytes)
+    }
+    fun run(inputTensor: OnnxTensor): Result {
+        var recognizedText: String = ""
+        var elapsedTimeInMs: Long = 0
+        inputTensor.use {
+            // Step 3: call ort inferenceSession run
+            val startTimeInMs = SystemClock.elapsedRealtime()
+            val output = session.run(Collections.singletonMap("input_text", inputTensor))
+            elapsedTimeInMs = SystemClock.elapsedRealtime() - startTimeInMs
+
+            // Step 4: output analysis
+            output.use {
+                val rawOutput = (output?.get(0)?.value) as Array<String>
+
+                // Step 5: set output result
+                recognizedText = rawOutput[0]
+            }
+        }
+        return Result(recognizedText, elapsedTimeInMs)
+    }
+    fun createOrtSession(ep:String, modelBytes: ByteArray):OrtSession {
+        if (Cur_EP.equals(ep)){
+            throw IllegalArgumentException("ep equals none")
+        }
+        Cur_EP = ep
+        // Initialize Ort Session and register the onnxruntime extensions package that contains the custom operators.
+        // Note: These are used to load tokenizer and post-processor ops
+        val sessionOptions: OrtSession.SessionOptions = OrtSession.SessionOptions()
+        if (ep.contains("CPU")){
+
+        }else if (ep.contains("NNAPI")) {
+            sessionOptions.addNnapi()
+        }else if (ep.contains("XNNAPCK")) {
+            val po = mapOf<String, String>()
+            sessionOptions.addXnnpack(po)
+        }
+        val env = OrtEnvironment.getEnvironment()
+        sessionOptions.setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+        sessionOptions.setSessionLogVerbosityLevel(0)
+        sessionOptions.registerCustomOpLibrary(OrtxPackage.getLibraryPath())
+        return env.createSession(modelBytes, sessionOptions)
+    }
+    override fun close() {
+        session.close()
+    }
+
+}
 class AudioRecognizer(private val context: Context): MethodChannel.MethodCallHandler {
   private val recognizeMethod = "recognize_audio"
     private  val bytesPerFloat = 4

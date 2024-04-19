@@ -48,13 +48,14 @@ class TextInterpreter(private val context: Context): MethodChannel.MethodCallHan
     }
     private fun interpretText(call: MethodCall, result: MethodChannel.Result)
     {
-        val bytes: ByteArray? =  call.argument("data")
-        if (bytes==null) {
+        val textAndQuestion: List<String>? = call.argument("data")
+        if (textAndQuestion==null) {
             result.error("Some arguments have null value", "Some arguments have null value.", null)
+            return
         }
 
-        val text = "Michael Jordan is widely regarded as one of the greatest basketball players of all time. His extraordinary talent, unparalleled work ethic, and relentless competitiveness propelled him to legendary status in the world of sports. Jordan's impact extends far beyond the basketball court, as he transcended the game to become a global icon and cultural phenomenon. From his numerous NBA championships to his iconic brand, Jordan's legacy continues to inspire aspiring athletes and fans around the world."
-        val question = "Who is Micheal Jordan?"
+        val text = textAndQuestion?.get(0) ?: "defaultText"
+        val question = textAndQuestion?.get(1) ?: "defaultQuestion"
         val inputTensor = fromString(text,question)
 
 

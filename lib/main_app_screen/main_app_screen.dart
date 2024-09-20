@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:medically/main_app_screen/recording_tab.dart';
+import 'package:medically/main_app_screen/forms_tab.dart';
 import 'package:medically/main_app_screen/home_tab.dart';
 
 class MainAppScreen extends StatelessWidget {
@@ -27,7 +27,7 @@ class MainAppScreen extends StatelessWidget {
               case 0:
                 return const HomeTab();
               case 1:
-                return const RecordingTab();
+                return const FormsTab();
               default:
                 return Container();
             }

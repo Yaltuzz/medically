@@ -2,6 +2,7 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
+    id 'com.chaquo.python'
 }
 
 def localProperties = new Properties()
@@ -61,6 +62,22 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+}
+
+chaquopy {
+    sourceSets {
+        main {
+            srcDir("src/main/python")
+        }
+    }
+    defaultConfig {
+        version = "3.8"
+        pip {
+            install "transformers[torch]==4.15.0"
+        }
+     }
+    productFlavors { }
+    sourceSets { }
 }
 
 flutter {

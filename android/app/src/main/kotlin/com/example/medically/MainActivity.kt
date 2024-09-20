@@ -1,126 +1,221 @@
 package com.example.medically
 
-import android.content.Context
-import io.flutter.embedding.android.FlutterActivity
-import androidx.annotation.NonNull
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.extensions.OrtxPackage
-import android.os.SystemClock
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import java.nio.FloatBuffer
+import java.nio.IntBuffer
+import android.Manifest
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicBoolean
 
-class MainActivity: FlutterActivity() {
-  private val CHANNEL = "medically"
+class MainActivity : FlutterActivity() {
+    private val CHANNEL_NLP = "naturalLanguageProcessing"
+    private val CHANNEL_ASR = "automaticSpeechRecognition"
+    private val stopRecordingFlag = AtomicBoolean(false)
+    private val workerThreadExecutor = Executors.newSingleThreadExecutor()
+    private fun hasRecordAudioPermission(): Boolean =
+        ActivityCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
 
-  override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-      super.configureFlutterEngine(flutterEngine)
-      val recognizer = AudioRecognizer(this)
-      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler(recognizer)
-  }
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == RECORD_AUDIO_PERMISSION_REQUEST_CODE) {
+            if (!hasRecordAudioPermission()) {
+                Toast.makeText(
+                    this,
+                    "Permission to record audio was not granted.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    fun onStartRecording(){
+        if (!hasRecordAudioPermission()) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                RECORD_AUDIO_PERMISSION_REQUEST_CODE
+            )
+            return onStartRecording()
+        }
+        workerThreadExecutor.submit {
+            try {
+                stopRecordingFlag.set(false)
+                val audioTensor = AudioTensorSource.fromRecording(stopRecordingFlag)
+                    //resources.openRawResource(R.raw.model_whisper).use {
+                    //val modelBytes = it.readBytes()
+                    //val inputStream = resources.openRawResource(R.raw.model_whisper)
+                    //val buffer = ByteArray(1024 * 1024) // 1 MB bufor
+                    //val output = ByteArrayOutputStream()
+                    //var bytesRead: Int
+                    //var allBytes = 0
+//                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+//                        output.write(buffer, 0, bytesRead)
+//                        runOnUiThread {
+//                            MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "flutter_channel").invokeMethod("flutterMethod", allBytes)
+//                        }
+//                        allBytes = allBytes + bytesRead
+//                    }
+                    //val modelBytes = output.toByteArray()
+
+
+                    val modelFilePath = copyModelToInternalStorage(context) // Pobierz ścieżkę do pliku modelu
+                    val environment = OrtEnvironment.getEnvironment()
+                    val sessionOptions = OrtSession.SessionOptions()
+                    sessionOptions.registerCustomOpLibrary(OrtxPackage.getLibraryPath())
+                    val session: OrtSession = environment.createSession(modelFilePath, sessionOptions)
+                    //val session: OrtSession = environment.createSession(modelBytes, sessionOptions)
+                    val forcedDecoderIds = intArrayOf(50258, 50269, 50359, 50363)
+                    val tensorShape =
+                        longArrayOf(1, forcedDecoderIds.size.toLong())  // Rozmiar tensoru: [1, 4]
+                    val tensorBuffer = IntBuffer.wrap(forcedDecoderIds)
+                    val onnxTensor = OnnxTensor.createTensor(environment, tensorBuffer, tensorShape)
+                    val baseInputs = mapOf(
+                        "min_length" to createIntTensor(environment, intArrayOf(1), tensorShape(1)),
+                        "max_length" to createIntTensor(
+                            environment,
+                            intArrayOf(200),
+                            tensorShape(1)
+                        ),
+                        "num_beams" to createIntTensor(environment, intArrayOf(1), tensorShape(1)),
+                        "num_return_sequences" to createIntTensor(
+                            environment,
+                            intArrayOf(1),
+                            tensorShape(1)
+                        ),
+                        "decoder_input_ids" to onnxTensor,
+                        "length_penalty" to createFloatTensor(
+                            environment,
+                            floatArrayOf(1.0f),
+                            tensorShape(1)
+                        ),
+                        "repetition_penalty" to createFloatTensor(
+                            environment,
+                            floatArrayOf(1.0f),
+                            tensorShape(1)
+                        ),
+                    )
+
+                    val inputs = mutableMapOf<String, OnnxTensor>()
+                    baseInputs.toMap(inputs)
+                    inputs["audio_pcm"] = audioTensor
+                    val outputs = session.run(inputs)
+                    val recognizedText = outputs.use {
+                        @Suppress("UNCHECKED_CAST")
+                        (outputs[0].value as Array<Array<String>>)[0][0]
+                    }
+                    print("wynik:" + recognizedText)
+                    runOnUiThread {
+                        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "flutter_channel").invokeMethod("flutterMethod", recognizedText)
+                    }
+
+               // }
+            } catch (e: Exception) {
+                println(e)
+            }
+        }
+    }
+
+    fun copyModelToInternalStorage(context: Context): String {
+        val modelInputStream = context.resources.openRawResource(R.raw.model_whisper)
+        val modelFile = File(context.filesDir, "model_whisper.onnx")
+
+        modelInputStream.use { input ->
+            FileOutputStream(modelFile).use { output ->
+                val buffer = ByteArray(1024)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                }
+            }
+        }
+
+        return modelFile.absolutePath // Zwraca ścieżkę do skopiowanego modelu
+    }
+
+    fun onStopRecording() {
+        stopRecordingFlag.set(true)
+    }
+
+    companion object {
+        const val TAG = "ORTSpeechRecognizer"
+        private const val RECORD_AUDIO_PERMISSION_REQUEST_CODE = 1
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        if (!Python.isStarted()) {
+            Python.start(AndroidPlatform(this))
+        }
+        val py = Python.getInstance()
+        val pyObj = py.getModule("myScript")
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CHANNEL_NLP
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "answer") {
+                val question: String? = call.argument("question")
+                val context: String? = call.argument("context")
+                val message = pyObj.callAttr("predict", question, context)
+                println(message.toString())
+                result.success(message.toString())
+            } else {
+                result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CHANNEL_ASR
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "start_recording") {
+                onStartRecording()
+                result.success("okay")
+            } else if (call.method == "stop_recording") {
+                onStopRecording()
+                result.success("okay")
+            } else {
+                result.notImplemented()
+            }
+        }
+    }
 }
 
-
-class AudioRecognizer(private val context: Context): MethodChannel.MethodCallHandler {
-  private val recognizeMethod = "recognize_audio"
-    private  val bytesPerFloat = 4
-    private  val sampleRate = 16000
-    private  val maxAudioLengthInSeconds = 30
-
-    private val speechRecognizer: SpeechRecognizer by lazy {
-        val resources = context.resources
-        resources.openRawResource(R.raw.whisper_cpu_int8_model).use {
-            val modelBytes = it.readBytes()
-            SpeechRecognizer(modelBytes)
-        }
-    }
-  override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-      when(call.method) {
-          recognizeMethod -> recognizeAudio(call, result)
-          else -> result.notImplemented()
-      }
-  }
-
-  private fun recognizeAudio(call: MethodCall, result: MethodChannel.Result) {
-      val bytes: ByteArray? =  call.argument("data")
-      if (bytes==null){
-          result.error("Some arguments have null value", "Some arguments have null value.", null);
-          return
-      }
-      val resources = context.resources
-      val audioTensor = resources.openRawResource(R.raw.audio_mono_16khz_f32le).use {
-          fromRawPcmBytes(it.readBytes())
-      }
-      //val audioTensor = fromRawPcmBytes(bytes)
-      val results = audioTensor.use { speechRecognizer.run(audioTensor) }
-      result.success(results.text)
-  }
-
-    fun fromRawPcmBytes(rawBytes: ByteArray): OnnxTensor {
-        val rawByteBuffer = ByteBuffer.wrap(rawBytes)
-        // TODO handle big-endian native order...
-        if (ByteOrder.nativeOrder() != ByteOrder.LITTLE_ENDIAN) {
-            throw NotImplementedError("Reading PCM data is only supported when native byte order is little-endian.")
-        }
-        rawByteBuffer.order(ByteOrder.nativeOrder())
-        val floatBuffer = rawByteBuffer.asFloatBuffer()
-        val numSamples = minOf(floatBuffer.capacity(), maxAudioLengthInSeconds * sampleRate)
-        val env = OrtEnvironment.getEnvironment()
-        return OnnxTensor.createTensor(
-            env, floatBuffer, tensorShape(1, numSamples.toLong())
-        )
-    }
+internal fun createIntTensor(env: OrtEnvironment, data: IntArray, shape: LongArray): OnnxTensor {
+    return OnnxTensor.createTensor(env, IntBuffer.wrap(data), shape)
 }
 
-class SpeechRecognizer(modelBytes: ByteArray) : AutoCloseable {
-    private val session: OrtSession
-    private val baseInputs: Map<String, OnnxTensor>
-
-    init {
-        val env = OrtEnvironment.getEnvironment()
-        val sessionOptions = OrtSession.SessionOptions()
-        sessionOptions.registerCustomOpLibrary(OrtxPackage.getLibraryPath())
-
-        session = env.createSession(modelBytes, sessionOptions)
-
-        val nMels: Long = 80
-        val nFrames: Long = 3000
-
-        baseInputs = mapOf(
-            "min_length" to createIntTensor(env, intArrayOf(1), tensorShape(1)),
-            "max_length" to createIntTensor(env, intArrayOf(200), tensorShape(1)),
-            "num_beams" to createIntTensor(env, intArrayOf(1), tensorShape(1)),
-            "num_return_sequences" to createIntTensor(env, intArrayOf(1), tensorShape(1)),
-            "length_penalty" to createFloatTensor(env, floatArrayOf(1.0f), tensorShape(1)),
-            "repetition_penalty" to createFloatTensor(env, floatArrayOf(1.0f), tensorShape(1)),
-        )
-    }
-
-
-    fun run(audioTensor: OnnxTensor): Result {
-        val inputs = mutableMapOf<String, OnnxTensor>()
-        baseInputs.toMap(inputs)
-        inputs["audio_pcm"] = audioTensor
-        val startTimeInMs = SystemClock.elapsedRealtime()
-        val outputs = session.run(inputs)
-        val elapsedTimeInMs = SystemClock.elapsedRealtime() - startTimeInMs
-        val recognizedText = outputs.use {
-            @Suppress("UNCHECKED_CAST")
-            (outputs[0].value as Array<Array<String>>)[0][0]
-        }
-        return Result(recognizedText, elapsedTimeInMs)
-    }
-
-    override fun close() {
-        baseInputs.values.forEach {
-            it.close()
-        }
-        session.close()
-    }
+internal fun createFloatTensor(
+    env: OrtEnvironment,
+    data: FloatArray,
+    shape: LongArray
+): OnnxTensor {
+    return OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape)
 }
 
-class Result(val text: String, val inferenceTimeInMs: Long)
+internal fun tensorShape(vararg dims: Long) = longArrayOf(*dims)

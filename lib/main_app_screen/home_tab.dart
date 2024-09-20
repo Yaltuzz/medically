@@ -18,7 +18,7 @@ class HomeTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Welcome to Medically',
+                  'Witamy w aplikacji',
                   style: TextStyle(
                     color: Colors.purple,
                     fontSize: 15,

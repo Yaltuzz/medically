@@ -31,6 +31,7 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_ASR = "automaticSpeechRecognition"
     private val stopRecordingFlag = AtomicBoolean(false)
     private val workerThreadExecutor = Executors.newSingleThreadExecutor()
+    private var modelFilePath = ""
     private fun hasRecordAudioPermission(): Boolean =
         ActivityCompat.checkSelfPermission(
             this,
@@ -66,32 +67,13 @@ class MainActivity : FlutterActivity() {
             try {
                 stopRecordingFlag.set(false)
                 val audioTensor = AudioTensorSource.fromRecording(stopRecordingFlag)
-                    //resources.openRawResource(R.raw.model_whisper).use {
-                    //val modelBytes = it.readBytes()
-                    //val inputStream = resources.openRawResource(R.raw.model_whisper)
-                    //val buffer = ByteArray(1024 * 1024) // 1 MB bufor
-                    //val output = ByteArrayOutputStream()
-                    //var bytesRead: Int
-                    //var allBytes = 0
-//                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-//                        output.write(buffer, 0, bytesRead)
-//                        runOnUiThread {
-//                            MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "flutter_channel").invokeMethod("flutterMethod", allBytes)
-//                        }
-//                        allBytes = allBytes + bytesRead
-//                    }
-                    //val modelBytes = output.toByteArray()
-
-
-                    val modelFilePath = copyModelToInternalStorage(context) // Pobierz ścieżkę do pliku modelu
                     val environment = OrtEnvironment.getEnvironment()
                     val sessionOptions = OrtSession.SessionOptions()
                     sessionOptions.registerCustomOpLibrary(OrtxPackage.getLibraryPath())
                     val session: OrtSession = environment.createSession(modelFilePath, sessionOptions)
-                    //val session: OrtSession = environment.createSession(modelBytes, sessionOptions)
                     val forcedDecoderIds = intArrayOf(50258, 50269, 50359, 50363)
                     val tensorShape =
-                        longArrayOf(1, forcedDecoderIds.size.toLong())  // Rozmiar tensoru: [1, 4]
+                        longArrayOf(1, forcedDecoderIds.size.toLong())
                     val tensorBuffer = IntBuffer.wrap(forcedDecoderIds)
                     val onnxTensor = OnnxTensor.createTensor(environment, tensorBuffer, tensorShape)
                     val baseInputs = mapOf(
@@ -128,11 +110,11 @@ class MainActivity : FlutterActivity() {
                         @Suppress("UNCHECKED_CAST")
                         (outputs[0].value as Array<Array<String>>)[0][0]
                     }
-                    print("wynik:" + recognizedText)
                     runOnUiThread {
                         MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "flutter_channel").invokeMethod("flutterMethod", recognizedText)
                     }
-
+                session.close()
+                environment.close()
                // }
             } catch (e: Exception) {
                 println(e)
@@ -153,8 +135,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
-
-        return modelFile.absolutePath // Zwraca ścieżkę do skopiowanego modelu
+        return modelFile.absolutePath
     }
 
     fun onStopRecording() {
@@ -173,6 +154,8 @@ class MainActivity : FlutterActivity() {
         }
         val py = Python.getInstance()
         val pyObj = py.getModule("myScript")
+        modelFilePath = copyModelToInternalStorage(context)
+
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

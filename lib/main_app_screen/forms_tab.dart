@@ -22,7 +22,8 @@ class _RecordingTabState extends State<FormsTab> {
   // Forms tools
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _genderController = TextEditingController();
+  final TextEditingController _medicinesController = TextEditingController();
+  final TextEditingController _refferalController = TextEditingController();
   final TextEditingController _symptomsController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   bool isLoading = false;
@@ -35,7 +36,6 @@ class _RecordingTabState extends State<FormsTab> {
           isAudioProcessing = false;
           _textController.text =
               (call.arguments as String?) ?? "Nie rozpoznano mowy";
-          print(_textController.text);
         });
       }
     });
@@ -135,7 +135,9 @@ class _RecordingTabState extends State<FormsTab> {
                       Center(
                         child: ElevatedButton(
                           onPressed: () async {
-                            isLoading = true;
+                            setState(() {
+                              isLoading = true;
+                            });
                             String text = _textController.text;
                             String question = 'Jak nazywa się pacjent';
                             final name = await platformNlp
@@ -151,15 +153,22 @@ class _RecordingTabState extends State<FormsTab> {
                               "question": question,
                             });
 
-                            question = 'Jaką płeć ma pacjent';
-                            final gender = await platformNlp
+                            question = 'Jakie objawy ma pacjent';
+                            final symptopms = await platformNlp
                                 .invokeMethod<String>('answer', {
                               "context": text,
                               "question": question,
                             });
 
-                            question = 'Jakie objawy ma pacjent';
-                            final symptopms = await platformNlp
+                            question = 'Jaki lek został przepisany';
+                            final medicines = await platformNlp
+                                .invokeMethod<String>('answer', {
+                              "context": text,
+                              "question": question,
+                            });
+
+                            question = 'Na co jest skierowanie';
+                            final refferal = await platformNlp
                                 .invokeMethod<String>('answer', {
                               "context": text,
                               "question": question,
@@ -168,10 +177,11 @@ class _RecordingTabState extends State<FormsTab> {
                             setState(() {
                               _nameController.text = name ?? '';
                               _ageController.text = age ?? '';
-                              _genderController.text = gender ?? '';
+                              _medicinesController.text = medicines ?? '';
                               _symptomsController.text = symptopms ?? '';
+                              _refferalController.text = refferal ?? '';
+                              isLoading = false;
                             });
-                            isLoading = false;
                           },
                           child: const Text('Przeanalizuj'),
                         ),
@@ -186,9 +196,14 @@ class _RecordingTabState extends State<FormsTab> {
                       controller: _nameController,
                     ),
                     const SizedBox(height: 20),
-                    const Text('Płeć pacjenta:'),
+                    const Text('Skierowania:'),
                     TextField(
-                      controller: _genderController,
+                      controller: _refferalController,
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Przepisane leki:'),
+                    TextField(
+                      controller: _medicinesController,
                     ),
                     const SizedBox(height: 20),
                     const Text('Wiek pacjenta:'),
